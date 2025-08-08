@@ -1,0 +1,7 @@
+AdvancedFuzzTest:testFuzz_CreateEscrow(address,address,address,address) (runs: 256, μ: 261667, ~: 261667)
+BalanceInvariants:invariant_TokenBalanceMustMatchTotalDeposits() (runs: 256, calls: 3840, reverts: 3361)
+FreelancerContractTest:testAddBusiness() (gas: 68328)
+FreelancerContractTest:testCreateAndDepositEscrow() (gas: 370397)
+FreelancerContractTest:testCreateProject() (gas: 64474)
+FreelancerContractTest:testRefundFunds() (gas: 422873)
+FreelancerContractTest:testReleaseFunds() (gas: 447518)

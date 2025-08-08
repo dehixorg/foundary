@@ -1,0 +1,110 @@
+Findings
+
+High
+
+[H-1] Reentrancy attack in releaseEscrowFunds allows funds to be drained
+
+Description: The function releaseEscrowFunds() calls safeTransfer() before updating state variables, which can allow a malicious contract to repeatedly call the function and drain funds.
+
+Impact: High - Funds can be stolen through reentrancy.
+
+Recommendation: Use the Checks-Effects-Interactions pattern and implement ReentrancyGuard.
+
+[H-2] Missing access control in addBusinessToDehix() allows unauthorized business creation
+
+Description: The function addBusinessToDehix() does not enforce any access control, allowing any user to create or overwrite business records.
+
+Impact: High - Unauthorized businesses can be registered, leading to potential fraud.
+
+Recommendation: Implement an onlyOwner or onlyAuthorized modifier.
+
+Medium
+
+[M-1] Business ID overwrite in addBusinessToDehix()
+
+Description: The function allows overwriting existing business records without validation.
+
+Impact: Medium - Legitimate business data can be tampered with.
+
+Recommendation: Require that a business ID does not already exist before adding.
+
+[M-2] Duplicate applications in applyToProjectToDehix()
+
+Description: The function allows a freelancer to apply multiple times to the same project.
+
+Impact: Medium - Can result in inflated application numbers and incorrect logic execution.
+
+Recommendation: Check if _freelancerId is already in appliedFreelancers before updating.
+
+[M-3] Inefficient oracle voting logic
+
+Description: The _majorityVote() function iterates through the Orecles array multiple times.
+
+Impact: Medium - Increased gas costs for every vote.
+
+Recommendation: Store Orecles.length in memory for optimized iteration.
+
+Informational / Non-Critical
+
+[I-1] Unused state variables
+
+Description: Variables like nextFreelancerId, nextProjectId, etc., are declared but never used.
+
+Impact: Low - Unnecessary storage usage.
+
+Recommendation: Remove unused variables to optimize gas.
+
+[I-2] Missing zero address validation
+
+Description: Several functions do not check for zero address inputs when setting addresses.
+
+Impact: Low - Can result in unintended contract behavior.
+
+Recommendation: Require nonzero addresses before setting values.
+
+Gas (Optional)
+
+[G-1] Allow incremental deposits in escrow
+
+Description: The escrow contract does not allow multiple deposits from the business.
+
+Impact: Medium - Increased complexity in handling contract payments.
+
+Recommendation: Modify depositFundsToEscrow() to allow incremental deposits.
+
+
+
+
+
+
+
+🔴 High-Risk Issues:
+[H-3] Integer overflow in releaseEscrowFunds() can cause fund mismanagement
+
+Issue: If an extremely large value is deposited, an overflow could reset balances.
+Fix: Use SafeMath or Solidity 0.8+ built-in overflow protection.
+[H-4] Lack of rate limiting in applyToProjectToDehix()
+
+Issue: A bot can spam applications, making the process unfair.
+Fix: Implement cooldown period or require stake deposits.
+🟡 Medium-Risk Issues:
+[M-4] Oracle manipulation in _majorityVote()
+
+Issue: A malicious actor controlling 51% of oracles can manipulate results.
+Fix: Implement weighted voting or require stake slashing for dishonest votes.
+[M-5] Lack of event emission in critical functions
+
+Issue: Functions like releaseEscrowFunds() do not emit logs, making debugging hard.
+Fix: Emit events after state updates.
+📌 Informational Issues:
+[I-3] Hardcoded magic numbers
+
+Issue: Constants like 0.05 ether are used without explanation.
+Fix: Define them as immutable or constant with comments.
+[I-4] Function visibility inconsistencies
+
+Issue: Some internal functions are public instead of internal.
+Fix: Restrict unnecessary exposure.
+
+
+https://dehix-frontend.vercel.app/dashboard/freelancer
