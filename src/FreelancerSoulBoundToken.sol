@@ -5,19 +5,6 @@ import {ERC721} from "openzeppelin-contracts/contracts/token/ERC721/ERC721.sol";
 import {AccessControl} from "openzeppelin-contracts/contracts/access/AccessControl.sol";
 import {ReentrancyGuard} from "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 
-/**
- * @title FreelancerSoulBoundToken
- * @dev A non-transferable NFT (SoulBound Token) that represents a freelancer's identity,
- * reputation, and contributions in the Freelancer ecosystem.
- *
- * Features:
- * - Soulbound tokens that cannot be transferred or sold
- * - Reputation tracking through metadata updates
- * - Performance metrics storage (completed projects, ratings, earnings)
- * - Skill endorsements and certifications
- * - Burn mechanism for account recovery
- */
-
 contract FreelancerSoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
     // --- CONSTANTS & ROLES ---
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
@@ -129,12 +116,7 @@ contract FreelancerSoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
 
     // --- CORE FUNCTIONS ---
 
-    /**
-     * @dev Mints a new soul-bound token for a freelancer
-     * @param _freelancerAddress The address of the freelancer
-     * @param _freelancerId The unique identifier for the freelancer
-     * @return The newly minted token ID
-     */
+    
     function mintFreelancerToken(address _freelancerAddress, string calldata _freelancerId)
         external
         onlyRole(MINTER_ROLE)
@@ -147,7 +129,6 @@ contract FreelancerSoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
 
         uint256 tokenId = s_tokenIdCounter.current();
         s_tokenIdCounter.increment();
-;
         s_tokenIdCounter++, tokenId);
 
         tokenIdToFreelancerId[tokenId] = _freelancerId;
@@ -171,10 +152,7 @@ contract FreelancerSoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
         return tokenId;
     }
 
-    /**
-     * @dev Burns a soul-bound token (only by owner or admin)
-     * @param _tokenId The token ID to burn
-     */
+   
     function burnToken(uint256 _tokenId)
         external
         tokenExists(_tokenId)
@@ -192,13 +170,7 @@ contract FreelancerSoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
 
     // --- REPUTATION & PERFORMANCE FUNCTIONS ---
 
-    /**
-     * @dev Updates the reputation and performance metrics of a freelancer
-     * @param _tokenId The token ID to update
-     * @param _projectsCompleted Number of completed projects
-     * @param _averageRating The average rating (0-100)
-     * @param _totalEarnings Total earnings accumulated
-     */
+   
     function updateReputation(
         uint256 _tokenId,
         uint256 _projectsCompleted,
@@ -219,12 +191,6 @@ contract FreelancerSoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
         _checkAndUnlockAchievements(_tokenId);
     }
 
-    /**
-     * @dev Adds an endorsed skill to a freelancer's profile
-     * @param _tokenId The token ID
-     * @param _skill The skill to endorse
-     * @param _verified Whether the skill is verified by admin
-     */
     function endorseSkill(uint256 _tokenId, string calldata _skill, bool _verified)
         external
         tokenExists(_tokenId)
@@ -241,11 +207,7 @@ contract FreelancerSoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
         emit SkillEndorsed(_tokenId, _skill, _verified, msg.sender, block.timestamp);
     }
 
-    /**
-     * @dev Revokes a skill endorsement
-     * @param _tokenId The token ID
-     * @param _skillIndex The index of the skill to revoke
-     */
+
     function revokeSkillEndorsement(uint256 _tokenId, uint256 _skillIndex)
         external
         tokenExists(_tokenId)
@@ -271,12 +233,7 @@ contract FreelancerSoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
 
     // --- ACHIEVEMENT FUNCTIONS ---
 
-    /**
-     * @dev Manually unlocks an achievement for a freelancer
-     * @param _tokenId The token ID
-     * @param _achievement The achievement to unlock
-     * @param _metadata Additional metadata for the achievement
-     */
+   
     function unlockAchievement(uint256 _tokenId, Achievement _achievement, string calldata _metadata)
         external
         tokenExists(_tokenId)
@@ -286,9 +243,6 @@ contract FreelancerSoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
         _unlockAchievementInternal(_tokenId, _achievement, _metadata);
     }
 
-    /**
-     * @dev Internal function to unlock achievements
-     */
     function _unlockAchievementInternal(uint256 _tokenId, Achievement _achievement, string memory _metadata)
         internal
     {
@@ -299,9 +253,9 @@ contract FreelancerSoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
         emit AchievementUnlocked(_tokenId, _achievement, _metadata, block.timestamp);
     }
 
-    /**
-     * @dev Checks and automatically unlocks achievements based on profile metrics
-     */
+    
+     // @dev Checks and automatically unlocks achievements based on profile metrics
+     
     function _checkAndUnlockAchievements(uint256 _tokenId) internal {
         FreelancerProfile storage profile = freelancerProfiles[_tokenId];
 
@@ -335,9 +289,9 @@ contract FreelancerSoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
 
     // --- VIEW FUNCTIONS ---
 
-    /**
-     * @dev Returns the freelancer profile for a given token ID
-     */
+   
+     //@dev Returns the freelancer profile for a given token ID
+     
     function getFreelancerProfile(uint256 _tokenId)
         external
         view
@@ -347,9 +301,9 @@ contract FreelancerSoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
         return freelancerProfiles[_tokenId];
     }
 
-    /**
-     * @dev Returns all endorsed skills for a freelancer
-     */
+    
+      //@dev Returns all endorsed skills for a freelancer
+   
     function getEndorsedSkills(uint256 _tokenId)
         external
         view
@@ -360,9 +314,9 @@ contract FreelancerSoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
         return (profile.endorsedSkills, profile.skillVerified);
     }
 
-    /**
-     * @dev Returns all achievements for a freelancer
-     */
+    
+     // @dev Returns all achievements for a freelancer
+     
     function getAchievements(uint256 _tokenId)
         external
         view
@@ -372,25 +326,22 @@ contract FreelancerSoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
         return tokenAchievements[_tokenId];
     }
 
-    /**
-     * @dev Returns the token ID for a given freelancer address
-     */
+     // @dev Returns the token ID for a given freelancer address
     function getTokenIdByFreelancer(address _freelancerAddress) external view returns (uint256) {
         return freelancerTokenId[_freelancerAddress];
     }
 
-    /**
-     * @dev Returns the total number of tokens minted
-     */
+      //@dev Returns the total number of tokens minted
+     
     function getTotalTokensMinted() external view returns (uint256) {
         return s_tokenIdCounter;
     }
 
     // --- SOULBOUND MECHANISM (PREVENT TRANSFERS) ---
 
-    /**
-     * @dev Override the transfer functions to prevent token transfers
-     */
+    
+     // @dev Override the transfer functions to prevent token transfers
+
     function transferFrom(address from, address to, uint256 tokenId)
         public
         override(ERC721)
