@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {ERC721} from "openzeppelin-contracts/contracts/token/ERC721/ERC721.sol";
-import {AccessControl} from "openzeppelin-contracts/contracts/access/AccessControl.sol";
-import {ReentrancyGuard} from "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
+import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {
+    ReentrancyGuard
+} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 contract FreelancerSoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
     // --- CONSTANTS & ROLES ---
@@ -13,7 +15,7 @@ contract FreelancerSoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
     bytes32 public constant ADMIN_ROLE = DEFAULT_ADMIN_ROLE;
 
     // --- STATE VARIABLES ---
-    uint256 private s_tokenIdCounter;
+    uint256 private s_tokenIdCounter = 1;
 
     // Mapping from token ID to freelancer ID
     mapping(uint256 => string) public tokenIdToFreelancerId;
@@ -63,7 +65,11 @@ contract FreelancerSoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
         uint256 timestamp
     );
 
-    event TokenBurned(uint256 indexed tokenId, address indexed freelancerAddress, uint256 timestamp);
+    event TokenBurned(
+        uint256 indexed tokenId,
+        address indexed freelancerAddress,
+        uint256 timestamp
+    );
 
     event ReputationUpdated(
         uint256 indexed tokenId,
@@ -88,7 +94,12 @@ contract FreelancerSoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
         uint256 timestamp
     );
 
-    event ProfileDataUpdated(uint256 indexed tokenId, string fieldName, string newValue, uint256 timestamp);
+    event ProfileDataUpdated(
+        uint256 indexed tokenId,
+        string fieldName,
+        string newValue,
+        uint256 timestamp
+    );
 
     // --- MODIFIERS ---
     modifier onlyTokenOwner(uint256 _tokenId) {
@@ -116,20 +127,20 @@ contract FreelancerSoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
 
     // --- CORE FUNCTIONS ---
 
-    
-    function mintFreelancerToken(address _freelancerAddress, string calldata _freelancerId)
-        external
-        onlyRole(MINTER_ROLE)
-        nonReentrant
-        returns (uint256)
-    {
+    function mintFreelancerToken(
+        address _freelancerAddress,
+        string calldata _freelancerId
+    ) external onlyRole(MINTER_ROLE) nonReentrant returns (uint256) {
         require(_freelancerAddress != address(0), "ZeroAddress");
         require(bytes(_freelancerId).length > 0, "EmptyFreelancerId");
-        require(freelancerTokenId[_freelancerAddress] == 0, "TokenAlreadyMinted");
+        require(
+            freelancerTokenId[_freelancerAddress] == 0,
+            "TokenAlreadyMinted"
+        );
 
-        uint256 tokenId = s_tokenIdCounter.current();
-        s_tokenIdCounter.increment();
-        s_tokenIdCounter++, tokenId);
+        uint256 tokenId = s_tokenIdCounter;
+        s_tokenIdCounter++;
+        _mint(_freelancerAddress, tokenId);
 
         tokenIdToFreelancerId[tokenId] = _freelancerId;
         freelancerTokenId[_freelancerAddress] = tokenId;
@@ -148,17 +159,18 @@ contract FreelancerSoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
             updatedAt: block.timestamp
         });
 
-        emit TokenMinted(tokenId, _freelancerAddress, _freelancerId, block.timestamp);
+        emit TokenMinted(
+            tokenId,
+            _freelancerAddress,
+            _freelancerId,
+            block.timestamp
+        );
         return tokenId;
     }
 
-   
-    function burnToken(uint256 _tokenId)
-        external
-        tokenExists(_tokenId)
-        onlyRole(ADMIN_ROLE)
-        nonReentrant
-    {
+    function burnToken(
+        uint256 _tokenId
+    ) external tokenExists(_tokenId) onlyRole(ADMIN_ROLE) nonReentrant {
         address freelancerAddress = ownerOf(_tokenId);
         delete tokenIdToFreelancerId[_tokenId];
         delete freelancerTokenId[freelancerAddress];
@@ -170,7 +182,6 @@ contract FreelancerSoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
 
     // --- REPUTATION & PERFORMANCE FUNCTIONS ---
 
-   
     function updateReputation(
         uint256 _tokenId,
         uint256 _projectsCompleted,
@@ -185,18 +196,23 @@ contract FreelancerSoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
         profile.totalEarnings = _totalEarnings;
         profile.updatedAt = block.timestamp;
 
-        emit ReputationUpdated(_tokenId, _projectsCompleted, _averageRating, _totalEarnings, block.timestamp);
+        emit ReputationUpdated(
+            _tokenId,
+            _projectsCompleted,
+            _averageRating,
+            _totalEarnings,
+            block.timestamp
+        );
 
         // Check and unlock achievements
         _checkAndUnlockAchievements(_tokenId);
     }
 
-    function endorseSkill(uint256 _tokenId, string calldata _skill, bool _verified)
-        external
-        tokenExists(_tokenId)
-        onlyRole(UPDATER_ROLE)
-        nonReentrant
-    {
+    function endorseSkill(
+        uint256 _tokenId,
+        string calldata _skill,
+        bool _verified
+    ) external tokenExists(_tokenId) onlyRole(UPDATER_ROLE) nonReentrant {
         require(bytes(_skill).length > 0, "EmptySkill");
 
         FreelancerProfile storage profile = freelancerProfiles[_tokenId];
@@ -204,75 +220,107 @@ contract FreelancerSoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
         profile.skillVerified.push(_verified);
         profile.updatedAt = block.timestamp;
 
-        emit SkillEndorsed(_tokenId, _skill, _verified, msg.sender, block.timestamp);
+        emit SkillEndorsed(
+            _tokenId,
+            _skill,
+            _verified,
+            msg.sender,
+            block.timestamp
+        );
     }
 
-
-    function revokeSkillEndorsement(uint256 _tokenId, uint256 _skillIndex)
-        external
-        tokenExists(_tokenId)
-        onlyRole(UPDATER_ROLE)
-        nonReentrant
-    {
+    function revokeSkillEndorsement(
+        uint256 _tokenId,
+        uint256 _skillIndex
+    ) external tokenExists(_tokenId) onlyRole(UPDATER_ROLE) nonReentrant {
         FreelancerProfile storage profile = freelancerProfiles[_tokenId];
-        require(_skillIndex < profile.endorsedSkills.length, "InvalidSkillIndex");
+        require(
+            _skillIndex < profile.endorsedSkills.length,
+            "InvalidSkillIndex"
+        );
 
         // Remove skill by replacing with last element and popping
         string memory removedSkill = profile.endorsedSkills[_skillIndex];
-        profile.endorsedSkills[_skillIndex] =
-            profile.endorsedSkills[profile.endorsedSkills.length - 1];
-        profile.skillVerified[_skillIndex] =
-            profile.skillVerified[profile.skillVerified.length - 1];
+        profile.endorsedSkills[_skillIndex] = profile.endorsedSkills[
+            profile.endorsedSkills.length - 1
+        ];
+        profile.skillVerified[_skillIndex] = profile.skillVerified[
+            profile.skillVerified.length - 1
+        ];
 
         profile.endorsedSkills.pop();
         profile.skillVerified.pop();
         profile.updatedAt = block.timestamp;
 
-        emit ProfileDataUpdated(_tokenId, "SkillRevoked", removedSkill, block.timestamp);
+        emit ProfileDataUpdated(
+            _tokenId,
+            "SkillRevoked",
+            removedSkill,
+            block.timestamp
+        );
     }
 
     // --- ACHIEVEMENT FUNCTIONS ---
 
-   
-    function unlockAchievement(uint256 _tokenId, Achievement _achievement, string calldata _metadata)
-        external
-        tokenExists(_tokenId)
-        onlyRole(REPUTATION_ROLE)
-        nonReentrant
-    {
+    function unlockAchievement(
+        uint256 _tokenId,
+        Achievement _achievement,
+        string calldata _metadata
+    ) external tokenExists(_tokenId) onlyRole(REPUTATION_ROLE) nonReentrant {
         _unlockAchievementInternal(_tokenId, _achievement, _metadata);
     }
 
-    function _unlockAchievementInternal(uint256 _tokenId, Achievement _achievement, string memory _metadata)
-        internal
-    {
-        AchievementRecord memory newAchievement =
-            AchievementRecord({achievement: _achievement, unlockedAt: block.timestamp, metadata: _metadata});
+    function _unlockAchievementInternal(
+        uint256 _tokenId,
+        Achievement _achievement,
+        string memory _metadata
+    ) internal {
+        AchievementRecord memory newAchievement = AchievementRecord({
+            achievement: _achievement,
+            unlockedAt: block.timestamp,
+            metadata: _metadata
+        });
 
         tokenAchievements[_tokenId].push(newAchievement);
-        emit AchievementUnlocked(_tokenId, _achievement, _metadata, block.timestamp);
+        emit AchievementUnlocked(
+            _tokenId,
+            _achievement,
+            _metadata,
+            block.timestamp
+        );
     }
 
-    
-     // @dev Checks and automatically unlocks achievements based on profile metrics
-     
+    // @dev Checks and automatically unlocks achievements based on profile metrics
+
     function _checkAndUnlockAchievements(uint256 _tokenId) internal {
         FreelancerProfile storage profile = freelancerProfiles[_tokenId];
 
         // Check for FIRST_PROJECT
         if (profile.totalProjectsCompleted == 1) {
-            _unlockAchievementInternal(_tokenId, Achievement.FIRST_PROJECT, "Completed first project");
+            _unlockAchievementInternal(
+                _tokenId,
+                Achievement.FIRST_PROJECT,
+                "Completed first project"
+            );
         }
 
         // Check for HIGHLY_RATED (average rating >= 90)
         if (profile.averageRating >= 90) {
-            _unlockAchievementInternal(_tokenId, Achievement.HIGHLY_RATED, "Achieved 90+ rating");
+            _unlockAchievementInternal(
+                _tokenId,
+                Achievement.HIGHLY_RATED,
+                "Achieved 90+ rating"
+            );
         }
 
         // Check for TOP_EARNER (based on earnings threshold)
         if (profile.totalEarnings >= 100000 * 10 ** 18) {
             // 100,000 tokens
-            _unlockAchievementInternal(_tokenId, Achievement.TOP_EARNER, "Earned 100,000+ tokens");
+            _unlockAchievementInternal(
+                _tokenId,
+                Achievement.TOP_EARNER,
+                "Earned 100,000+ tokens"
+            );
         }
 
         // Check for SKILL_EXPERT (5+ verified skills)
@@ -283,28 +331,29 @@ contract FreelancerSoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
             }
         }
         if (verifiedSkillCount >= 5) {
-            _unlockAchievementInternal(_tokenId, Achievement.SKILL_EXPERT, "5+ verified skills");
+            _unlockAchievementInternal(
+                _tokenId,
+                Achievement.SKILL_EXPERT,
+                "5+ verified skills"
+            );
         }
     }
 
     // --- VIEW FUNCTIONS ---
 
-   
-     //@dev Returns the freelancer profile for a given token ID
-     
-    function getFreelancerProfile(uint256 _tokenId)
-        external
-        view
-        tokenExists(_tokenId)
-        returns (FreelancerProfile memory)
-    {
+    //@dev Returns the freelancer profile for a given token ID
+
+    function getFreelancerProfile(
+        uint256 _tokenId
+    ) external view tokenExists(_tokenId) returns (FreelancerProfile memory) {
         return freelancerProfiles[_tokenId];
     }
 
-    
-      //@dev Returns all endorsed skills for a freelancer
-   
-    function getEndorsedSkills(uint256 _tokenId)
+    //@dev Returns all endorsed skills for a freelancer
+
+    function getEndorsedSkills(
+        uint256 _tokenId
+    )
         external
         view
         tokenExists(_tokenId)
@@ -314,65 +363,52 @@ contract FreelancerSoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
         return (profile.endorsedSkills, profile.skillVerified);
     }
 
-    
-     // @dev Returns all achievements for a freelancer
-     
-    function getAchievements(uint256 _tokenId)
-        external
-        view
-        tokenExists(_tokenId)
-        returns (AchievementRecord[] memory)
-    {
+    // @dev Returns all achievements for a freelancer
+
+    function getAchievements(
+        uint256 _tokenId
+    ) external view tokenExists(_tokenId) returns (AchievementRecord[] memory) {
         return tokenAchievements[_tokenId];
     }
 
-     // @dev Returns the token ID for a given freelancer address
-    function getTokenIdByFreelancer(address _freelancerAddress) external view returns (uint256) {
+    // @dev Returns the token ID for a given freelancer address
+    function getTokenIdByFreelancer(
+        address _freelancerAddress
+    ) external view returns (uint256) {
         return freelancerTokenId[_freelancerAddress];
     }
 
-      //@dev Returns the total number of tokens minted
-     
+    //@dev Returns the total number of tokens minted
+
     function getTotalTokensMinted() external view returns (uint256) {
-        return s_tokenIdCounter;
+        return s_tokenIdCounter - 1;
     }
 
     // --- SOULBOUND MECHANISM (PREVENT TRANSFERS) ---
 
-    
-     // @dev Override the transfer functions to prevent token transfers
+    // @dev Override the transfer functions to prevent token transfers
 
-    function transferFrom(address from, address to, uint256 tokenId)
-        public
-        override(ERC721)
-        soulBoundTransferCheck(from, to)
-    {
+    function transferFrom(
+        address from,
+        address to,
+        uint256 tokenId
+    ) public override(ERC721) {
         revert("SoulBound: Tokens cannot be transferred");
     }
 
-    function safeTransferFrom(address from, address to, uint256 tokenId)
-        public
-        override(ERC721)
-        soulBoundTransferCheck(from, to)
-    {
-        revert("SoulBound: Tokens cannot be transferred");
-    }
-
-    function safeTransferFrom(address from, address to, uint256 tokenId, bytes memory data)
-        public
-        override(ERC721)
-        soulBoundTransferCheck(from, to)
-    {
+    function safeTransferFrom(
+        address from,
+        address to,
+        uint256 tokenId,
+        bytes memory data
+    ) public override(ERC721) {
         revert("SoulBound: Tokens cannot be transferred");
     }
 
     // --- SUPPORTSINTERFACE OVERRIDE ---
-    function supportsInterface(bytes4 interfaceId)
-        public
-        view
-        override(ERC721, AccessControl)
-        returns (bool)
-    {
+    function supportsInterface(
+        bytes4 interfaceId
+    ) public view override(ERC721, AccessControl) returns (bool) {
         return super.supportsInterface(interfaceId);
     }
 }
