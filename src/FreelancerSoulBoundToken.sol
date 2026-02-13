@@ -341,6 +341,15 @@ contract FreelancerSoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
 
     // --- VIEW FUNCTIONS ---
 
+    /// @notice Returns the FreelancerProfile for a given user address (if minted)
+    function getProfile(
+        address user
+    ) external view returns (FreelancerProfile memory) {
+        uint256 tokenId = freelancerTokenId[user];
+        require(tokenId != 0, "NoSBTForUser");
+        return freelancerProfiles[tokenId];
+    }
+
     //@dev Returns the freelancer profile for a given token ID
 
     function getFreelancerProfile(
@@ -389,19 +398,19 @@ contract FreelancerSoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
     // @dev Override the transfer functions to prevent token transfers
 
     function transferFrom(
-        address from,
-        address to,
-        uint256 tokenId
-    ) public override(ERC721) {
+        address,
+        address,
+        uint256
+    ) public pure override(ERC721) {
         revert("SoulBound: Tokens cannot be transferred");
     }
 
     function safeTransferFrom(
-        address from,
-        address to,
-        uint256 tokenId,
-        bytes memory data
-    ) public override(ERC721) {
+        address,
+        address,
+        uint256,
+        bytes memory
+    ) public pure override(ERC721) {
         revert("SoulBound: Tokens cannot be transferred");
     }
 

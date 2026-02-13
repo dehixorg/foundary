@@ -246,7 +246,6 @@ contract NDASoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
     }
 
     function _burnNDA(uint256 _tokenId, NDAStatus _reason) internal {
-        address owner = ownerOf(_tokenId);
         ndas[_tokenId].burned = true;
         _burn(_tokenId);
 
@@ -275,20 +274,16 @@ contract NDASoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
     }
 
     // Soulbound mechanism - prevent transfers
-    function transferFrom(
-        address from,
-        address to,
-        uint256 tokenId
-    ) public override {
+    function transferFrom(address, address, uint256) public pure override {
         revert("SoulBound: Tokens cannot be transferred");
     }
 
     function safeTransferFrom(
-        address from,
-        address to,
-        uint256 tokenId,
-        bytes memory data
-    ) public override {
+        address,
+        address,
+        uint256,
+        bytes memory
+    ) public pure override {
         revert("SoulBound: Tokens cannot be transferred");
     }
 
