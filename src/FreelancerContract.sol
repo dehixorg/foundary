@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.28;
- 
+pragma solidity ^0.8.28;
 
- 
-import {IERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
-import {ReentrancyGuard} from "lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
+import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import {
+    SafeERC20
+} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
+import {
+    ReentrancyGuard
+} from "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 import "./StakingRewards.sol";
 
 contract FreelancerContract is ReentrancyGuard {
@@ -50,17 +52,39 @@ contract FreelancerContract is ReentrancyGuard {
     mapping(string => uint256) private s_refundVotes;
 
     // --- EVENTS ---
-    event FreelancerAdded(string indexed freelancerId, address indexed freelancerAddress);
-    event BusinessAdded(string indexed businessId, address indexed businessAddress);
+    event FreelancerAdded(
+        string indexed freelancerId,
+        address indexed freelancerAddress
+    );
+    event BusinessAdded(
+        string indexed businessId,
+        address indexed businessAddress
+    );
     event ProjectCreated(string indexed projectId);
     event ProjectDeactivated(string indexed projectId);
     event OracleAdded(address indexed oracleAddress);
     event OracleRemoved(address indexed oracleAddress);
-    event EscrowCreated(string indexed escrowId, address indexed business, address indexed freelancer);
+    event EscrowCreated(
+        string indexed escrowId,
+        address indexed business,
+        address indexed freelancer
+    );
     event FundsDeposited(string indexed escrowId, uint256 amount);
-    event FundsReleased(string indexed escrowId, address indexed to, uint256 amount);
-    event FundsRefunded(string indexed escrowId, address indexed to, uint256 amount);
-    event Voted(string indexed escrowId, address indexed oracle, bool voteForRelease);
+    event FundsReleased(
+        string indexed escrowId,
+        address indexed to,
+        uint256 amount
+    );
+    event FundsRefunded(
+        string indexed escrowId,
+        address indexed to,
+        uint256 amount
+    );
+    event Voted(
+        string indexed escrowId,
+        address indexed oracle,
+        bool voteForRelease
+    );
 
     // --- MODIFIERS ---
     modifier onlyOwner() {
@@ -79,17 +103,26 @@ contract FreelancerContract is ReentrancyGuard {
         stakingContract = StakingRewards(_stakingContractAddress);
     }
 
-    function addBusiness(string calldata _businessId, address _businessAddress) external onlyOwner {
+    function addBusiness(
+        string calldata _businessId,
+        address _businessAddress
+    ) external onlyOwner {
         require(bytes(_businessId).length > 0, "EmptyBusinessId");
         require(_businessAddress != address(0), "ZeroAddress");
-        require(bytes(s_businesses[_businessId].businessId).length == 0, "BusinessExists");
+        require(
+            bytes(s_businesses[_businessId].businessId).length == 0,
+            "BusinessExists"
+        );
 
         s_businesses[_businessId].businessId = _businessId;
         s_businesses[_businessId].businessAddress = _businessAddress;
         emit BusinessAdded(_businessId, _businessAddress);
     }
 
-    function addFreelancer(string calldata _freelancerId, address _freelancerAddress) external onlyOwner {
+    function addFreelancer(
+        string calldata _freelancerId,
+        address _freelancerAddress
+    ) external onlyOwner {
         require(bytes(_freelancerId).length > 0, "EmptyFreelancerId");
         require(_freelancerAddress != address(0), "ZeroAddress");
 
@@ -112,7 +145,10 @@ contract FreelancerContract is ReentrancyGuard {
 
     function addOracle(address _oracleAddress) external onlyOwner {
         require(_oracleAddress != address(0), "ZeroAddress");
-        require(stakingContract.balanceOf(_oracleAddress) > 0, "OracleMustHaveStake");
+        require(
+            stakingContract.balanceOf(_oracleAddress) > 0,
+            "OracleMustHaveStake"
+        );
         s_oracles[_oracleAddress] = true;
         emit OracleAdded(_oracleAddress);
     }
@@ -122,14 +158,25 @@ contract FreelancerContract is ReentrancyGuard {
         emit OracleRemoved(_oracleAddress);
     }
 
-    function applyToProject(string calldata _projectId, address _freelancerAddress) external {
+    function applyToProject(
+        string calldata _projectId,
+        address _freelancerAddress
+    ) external {
         Project storage project = s_projects[_projectId];
         require(project.isActive, "ProjectNotActive");
-        require(!project.appliedFreelancers[_freelancerAddress], "AlreadyApplied");
+        require(
+            !project.appliedFreelancers[_freelancerAddress],
+            "AlreadyApplied"
+        );
         project.appliedFreelancers[_freelancerAddress] = true;
     }
 
-    function createEscrow(string calldata _escrowId, address[] calldata _votingOracles, address _freelancer, address _tokenAddress) external {
+    function createEscrow(
+        string calldata _escrowId,
+        address[] calldata _votingOracles,
+        address _freelancer,
+        address _tokenAddress
+    ) external {
         require(bytes(_escrowId).length > 0, "EmptyEscrowId");
         require(_votingOracles.length % 2 != 0, "InvalidOracleCount");
         for (uint256 i = 0; i < _votingOracles.length; i++) {
@@ -150,11 +197,18 @@ contract FreelancerContract is ReentrancyGuard {
         require(msg.sender == escrow.businessAddress, "OnlyBusiness");
         require(_amount > 0, "ZeroAmount");
         escrow.depositedAmount += _amount;
-        escrow.tokenAddress.safeTransferFrom(msg.sender, address(this), _amount);
+        escrow.tokenAddress.safeTransferFrom(
+            msg.sender,
+            address(this),
+            _amount
+        );
         emit FundsDeposited(_escrowId, _amount);
     }
 
-    function vote(string calldata _escrowId, bool _release) external onlyOracle {
+    function vote(
+        string calldata _escrowId,
+        bool _release
+    ) external onlyOracle {
         require(!s_hasVoted[_escrowId][msg.sender], "AlreadyVoted");
         s_hasVoted[_escrowId][msg.sender] = true;
         if (_release) {
@@ -167,28 +221,49 @@ contract FreelancerContract is ReentrancyGuard {
 
     function releaseFunds(string calldata _escrowId) external nonReentrant {
         Escrow storage escrow = s_escrows[_escrowId];
-        require(msg.sender == escrow.businessAddress || s_oracles[msg.sender], "NotAuthorized");
+        require(
+            msg.sender == escrow.businessAddress || s_oracles[msg.sender],
+            "NotAuthorized"
+        );
         require(_majorityVote(_escrowId, true), "MajorityVoteFailed");
         uint256 amountToRelease = escrow.depositedAmount;
         require(amountToRelease > 0, "NoFunds");
         escrow.depositedAmount = 0;
-        escrow.tokenAddress.safeTransfer(escrow.freelancerAddress, amountToRelease);
-        emit FundsReleased(_escrowId, escrow.freelancerAddress, amountToRelease);
+        escrow.tokenAddress.safeTransfer(
+            escrow.freelancerAddress,
+            amountToRelease
+        );
+        emit FundsReleased(
+            _escrowId,
+            escrow.freelancerAddress,
+            amountToRelease
+        );
     }
 
     function refundFunds(string calldata _escrowId) external nonReentrant {
         Escrow storage escrow = s_escrows[_escrowId];
-        require(msg.sender == escrow.freelancerAddress || s_oracles[msg.sender], "NotAuthorized");
+        require(
+            msg.sender == escrow.freelancerAddress || s_oracles[msg.sender],
+            "NotAuthorized"
+        );
         require(_majorityVote(_escrowId, false), "MajorityVoteFailed");
         uint256 amountToRefund = escrow.depositedAmount;
         require(amountToRefund > 0, "NoFunds");
         escrow.depositedAmount = 0;
-        escrow.tokenAddress.safeTransfer(escrow.businessAddress, amountToRefund);
+        escrow.tokenAddress.safeTransfer(
+            escrow.businessAddress,
+            amountToRefund
+        );
         emit FundsRefunded(_escrowId, escrow.businessAddress, amountToRefund);
     }
 
-    function _majorityVote(string memory _escrowId, bool _forRelease) private view returns (bool) {
-        uint256 voteCount = _forRelease ? s_releaseVotes[_escrowId] : s_refundVotes[_escrowId];
+    function _majorityVote(
+        string memory _escrowId,
+        bool _forRelease
+    ) private view returns (bool) {
+        uint256 voteCount = _forRelease
+            ? s_releaseVotes[_escrowId]
+            : s_refundVotes[_escrowId];
         uint256 majority = (s_escrows[_escrowId].votingOracles.length / 2) + 1;
         return voteCount >= majority;
     }
@@ -197,7 +272,20 @@ contract FreelancerContract is ReentrancyGuard {
         return i_owner;
     }
 
-    function getEscrow(string memory _escrowId) external view returns (string memory, address[] memory, address, address, uint256, address) {
+    function getEscrow(
+        string memory _escrowId
+    )
+        external
+        view
+        returns (
+            string memory,
+            address[] memory,
+            address,
+            address,
+            uint256,
+            address
+        )
+    {
         Escrow storage escrow = s_escrows[_escrowId];
         return (
             escrow.escrowId,
