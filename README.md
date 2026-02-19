@@ -1,19 +1,46 @@
-## Foundry
+##  Freelancer Trust Protocol
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+A decentralized smart contract system that enables secure collaboration between business owners and freelancers using blockchain-based agreements, staking, and soulbound reputation tokens.
 
-Foundry consists of:
+##  Overview
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+Freelancer Trust Protocol is a Web3-based platform designed to:
 
-## Documentation
+- Create on-chain Non-Disclosure Agreements (NDAs)
+- Enable secure collaboration between business owners and freelancers
+- Provide staking-based incentives
+- Issue non-transferable reputation tokens (SoulBound Tokens)
+- Increase trust and transparency in freelance work
 
-https://book.getfoundry.sh/
+##  Smart Contracts
 
-## Usage
+- FreelancerContract
+- StakingRewards
+- MyToken (Platform Token)
+- NDASoulBoundToken
+- FreelancerSoulBoundToken
+
+##  Network
+
+Currently deployed on:
+- BNB Smart Chain Testnet (Chain ID: 97)
+##  Security
+
+- AccessControl-based permissions
+- Soulbound token restrictions
+- Reentrancy protection
+- Role-based authorization
+- Lifecycle state management
+
+## 🗺 Roadmap
+
+See `docs/PROJECT.md` for roadmap and impact.
+
+##  Setup
+
+See `docs/TECHNICAL.md` for full setup instructions.
+
+
 
 ### Build
 
