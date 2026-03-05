@@ -1,6 +1,7 @@
 {
   "transactions": [
     {
+      
       "hash": "0xc7861fb1c917d69067fcdecef2ade6988ef0ff417bc35f178f3ee03aa358ff2b",
       "transactionType": "CREATE",
       "contractName": "MyToken",
