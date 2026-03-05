@@ -10,6 +10,7 @@ contract EscrowContract is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     address private immutable i_owner;
+    
 
     constructor() {
         i_owner = msg.sender;
