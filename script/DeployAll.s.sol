@@ -1,131 +1,42 @@
+// script/DeployAll.s.sol
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "forge-std/Test.sol";
-import "../src/EscrowContract.sol";
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {Script} from "forge-std/Script.sol";
+import {MyToken} from "../src/Token.sol";
+import {StakingRewards} from "../src/StakingRewards.sol";
+import {FreelancerContract} from "../src/FreelancerContract.sol";
+import {FreelancerSoulBoundToken} from "../src/FreelancerSoulBoundToken.sol";
+import {NDASoulBoundToken} from "../src/NDASoulBoundToken.sol";
+import {EscrowContract} from "../src/EscrowContract.sol";
 
-contract MockToken is ERC20 {
+contract DeployAll is Script {
+    function run() external returns (FreelancerContract, StakingRewards, MyToken, FreelancerSoulBoundToken, NDASoulBoundToken, EscrowContract) {
+        vm.startBroadcast();
 
-    constructor() ERC20("MockToken","MTK") {
-        _mint(msg.sender, 1000000 ether);
+        // 1. Deploy the ERC20 Token first.
+        // This token can be used for both staking and rewards.
+        MyToken token = new MyToken();
+
+        // 2. Deploy the StakingRewards contract.
+        // It needs to know which token to use for staking and which for rewards.
+        // We'll use the same token for both in this example.
+        StakingRewards stakingContract = new StakingRewards(address(token), address(token));
+
+        // 3. Deploy the FreelancerContract.
+        // It needs the address of the StakingRewards contract to enforce staking rules.
+        FreelancerContract freelancerContract = new FreelancerContract(address(stakingContract));
+
+        // 4. Deploy the FreelancerSoulBoundToken.
+        FreelancerSoulBoundToken freelancerSbt = new FreelancerSoulBoundToken();
+
+        // 5. Deploy the NDASoulBoundToken.
+        NDASoulBoundToken ndaSbt = new NDASoulBoundToken();
+
+        // 6. Deploy the EscrowContract.
+        EscrowContract escrowContract = new EscrowContract();
+
+        vm.stopBroadcast();
+        return (freelancerContract, stakingContract, token, freelancerSbt, ndaSbt, escrowContract);
     }
-
-}
-
-contract EscrowContractTest is Test {
-
-    EscrowContract escrow;
-    MockToken token;
-
-    address client = address(1);
-    address freelancer = address(2);
-    address admin = address(this);
-
-    function setUp() public {
-
-        escrow = new EscrowContract();
-        token = new MockToken();
-
-        token.transfer(client, 1000 ether);
-
-    }
-
-    function testCreateEscrow() public {
-
-        vm.prank(client);
-
-        escrow.createEscrow(
-            "job1",
-            freelancer
-        );
-
-        (
-            address c,
-            address f,
-            address[] memory tokens,
-            bool active
-        ) = escrow.getEscrow("job1");
-
-        assertEq(c, client);
-        assertEq(f, freelancer);
-        assertEq(active, true);
-        assertEq(tokens.length, 0);
-    }
-
-    function testDepositToken() public {
-
-        vm.startPrank(client);
-
-        escrow.createEscrow("job1", freelancer);
-
-        token.approve(address(escrow), 100 ether);
-
-        escrow.depositToken(
-            "job1",
-            address(token),
-            100 ether
-        );
-
-        vm.stopPrank();
-
-        uint256 balance = escrow.getTokenBalance(
-            "job1",
-            address(token)
-        );
-
-        assertEq(balance, 100 ether);
-    }
-
-    function testReleaseFunds() public {
-
-        vm.startPrank(client);
-
-        escrow.createEscrow("job1", freelancer);
-
-        token.approve(address(escrow), 100 ether);
-
-        escrow.depositToken(
-            "job1",
-            address(token),
-            100 ether
-        );
-
-        escrow.releaseFunds("job1");
-
-        vm.stopPrank();
-
-        assertEq(
-            token.balanceOf(freelancer),
-            100 ether
-        );
-    }
-
-    function testAdminResolveDispute() public {
-
-        vm.startPrank(client);
-
-        escrow.createEscrow("job1", freelancer);
-
-        token.approve(address(escrow), 100 ether);
-
-        escrow.depositToken(
-            "job1",
-            address(token),
-            100 ether
-        );
-
-        vm.stopPrank();
-
-        escrow.resolveDispute(
-            "job1",
-            true
-        );
-
-        assertEq(
-            token.balanceOf(freelancer),
-            100 ether
-        );
-    }
-
 }
