@@ -32,6 +32,7 @@ contract DeployAll is Script {
 
         // 5. Deploy the NDASoulBoundToken.
         NDASoulBoundToken ndaSbt = new NDASoulBoundToken();
+        
 
         // 6. Deploy the EscrowContract.
         EscrowContract escrowContract = new EscrowContract();
