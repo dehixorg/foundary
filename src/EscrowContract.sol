@@ -1,295 +1,217 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.28;
 
-// IMPORTS
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuard} from "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 
-// CONTRACT
-contract FreelanceMarketplace is ReentrancyGuard, Ownable {
+contract FreelancerContract is ReentrancyGuard {
 
     using SafeERC20 for IERC20;
 
-    // CONSTRUCTOR
-    constructor() Ownable(msg.sender) {}
+    address private immutable i_owner;
 
-    // ENUM FOR TASK STATUS
-    enum Status {
-        Open,
-        Proposed,
-        Accepted,
-        Funded,
-        Submitted,
-        Approved,
-        Disputed,
-        Resolved,
-        Refunded
+    constructor() {
+        i_owner = msg.sender;
     }
 
-    // STRUCT FOR TOKEN PAYMENT
-    struct TokenPayment {
-        address token;      // address(0) means ETH
-        uint256 amount;     // token amount
-    }
-
-    // STRUCT FOR TASK
-    struct Task {
-        address client;         // task creator
-        address freelancer;     // assigned freelancer
-
-        string title;           // task title
-        string description;     // task description
-
-        uint256 deadline;       // deadline timestamp
-        uint256 submissionTime; // when freelancer submitted
-
-        Status status;          // current task status
-
-        TokenPayment[] proposal; // multi-token proposal
-    }
-
-    // STORAGE VARIABLES
-    uint256 public taskCounter;                        // total tasks
-    uint256 public constant MAX_TOKENS = 5;            // limit proposal tokens
-    uint256 public constant DISPUTE_WINDOW = 48 hours; // 48 hour window
-
-    mapping(uint256 => Task) private tasks;            // taskId => Task
-
-    // EVENTS
-    event TaskCreated(uint256 indexed id);
-    event PaymentProposed(uint256 indexed id);
-    event ProposalAccepted(uint256 indexed id);
-    event TaskFunded(uint256 indexed id);
-    event WorkSubmitted(uint256 indexed id);
-    event TaskApproved(uint256 indexed id);
-    event TaskDisputed(uint256 indexed id);
-    event TaskResolved(uint256 indexed id, bool freelancerWon);
-
-    // MODIFIER: ONLY CLIENT
-    modifier onlyClient(uint256 id) {
-        require(msg.sender == tasks[id].client, "Not client");
+    modifier onlyOwner() {
+        require(msg.sender == i_owner, "OnlyOwner");
         _;
     }
 
-    // MODIFIER: ONLY FREELANCER
-    modifier onlyFreelancer(uint256 id) {
-        require(msg.sender == tasks[id].freelancer, "Not freelancer");
-        _;
+    struct Escrow {
+        string escrowId;
+        address client;
+        address freelancer;
+        address[] tokens;
+        bool active;
     }
 
-    // MODIFIER: CHECK STATUS
-    modifier inStatus(uint256 id, Status s) {
-        require(tasks[id].status == s, "Invalid state");
-        _;
-    }
+    mapping(string => Escrow) private s_escrows;
 
-    // CREATE TASK FUNCTION
-    function createTask(
-        string calldata _title,
-        string calldata _description,
-        address _freelancer,
-        uint256 _deadline
+    mapping(string => mapping(address => uint256)) private s_tokenBalances;
+
+    event EscrowCreated(
+        string indexed escrowId,
+        address indexed client,
+        address indexed freelancer
+    );
+
+    event FundsDeposited(
+        string indexed escrowId,
+        address token,
+        uint256 amount
+    );
+
+    event FundsReleased(
+        string indexed escrowId
+    );
+
+    event FundsRefunded(
+        string indexed escrowId
+    );
+
+    event DisputeResolved(
+        string indexed escrowId,
+        bool releasedToFreelancer
+    );
+
+    function createEscrow(
+        string calldata _escrowId,
+        address _freelancer
     ) external {
 
-        require(_freelancer != address(0), "Invalid freelancer");
+        require(bytes(_escrowId).length > 0, "EmptyEscrowId");
+        require(_freelancer != address(0), "InvalidFreelancer");
 
-        taskCounter++;
+        Escrow storage e = s_escrows[_escrowId];
 
-        Task storage t = tasks[taskCounter];
+        require(!e.active, "EscrowExists");
 
-        t.client = msg.sender;
-        t.freelancer = _freelancer;
-        t.title = _title;
-        t.description = _description;
-        t.deadline = _deadline;
-        t.status = Status.Open;
+        e.escrowId = _escrowId;
+        e.client = msg.sender;
+        e.freelancer = _freelancer;
+        e.active = true;
 
-        emit TaskCreated(taskCounter);
+        emit EscrowCreated(_escrowId, msg.sender, _freelancer);
     }
 
-    // FREELANCER PROPOSE PAYMENT
-    function proposePayment(
-        uint256 id,
-        address[] calldata tokens,
-        uint256[] calldata amounts
-    )
-        external
-        onlyFreelancer(id)
-        inStatus(id, Status.Open)
-    {
-        require(tokens.length == amounts.length, "Length mismatch");
-        require(tokens.length > 0, "Empty proposal");
-        require(tokens.length <= MAX_TOKENS, "Too many tokens");
+    function depositToken(
+        string calldata _escrowId,
+        address token,
+        uint256 amount
+    ) external nonReentrant {
 
-        Task storage t = tasks[id];
+        Escrow storage e = s_escrows[_escrowId];
 
-        delete t.proposal;
+        require(e.active, "EscrowNotActive");
+        require(msg.sender == e.client, "OnlyClient");
+        require(amount > 0, "ZeroAmount");
 
-        for (uint256 i = 0; i < tokens.length; i++) {
-            require(amounts[i] > 0, "Zero amount");
-            t.proposal.push(TokenPayment(tokens[i], amounts[i]));
-        }
-
-        t.status = Status.Proposed;
-
-        emit PaymentProposed(id);
-    }
-
-    // CLIENT ACCEPT PROPOSAL
-    function acceptProposal(uint256 id)
-        external
-        onlyClient(id)
-        inStatus(id, Status.Proposed)
-    {
-        tasks[id].status = Status.Accepted;
-
-        emit ProposalAccepted(id);
-    }
-
-    // CLIENT FUND TASK
-    function fundTask(uint256 id)
-        external
-        payable
-        nonReentrant
-        onlyClient(id)
-        inStatus(id, Status.Accepted)
-    {
-        Task storage t = tasks[id];
-
-        uint256 ethRequired;
-
-        // CHECK PHASE
-        for (uint256 i = 0; i < t.proposal.length; i++) {
-            if (t.proposal[i].token == address(0)) {
-                ethRequired += t.proposal[i].amount;
-            }
-        }
-
-        require(msg.value == ethRequired, "Incorrect ETH");
-
-        // INTERACTION PHASE
-        for (uint256 i = 0; i < t.proposal.length; i++) {
-            if (t.proposal[i].token != address(0)) {
-                IERC20(t.proposal[i].token).safeTransferFrom(
-                    msg.sender,
-                    address(this),
-                    t.proposal[i].amount
-                );
-            }
-        }
-
-        // EFFECT PHASE
-        t.status = Status.Funded;
-
-        emit TaskFunded(id);
-    }
-
-    // FREELANCER SUBMIT WORK
-    function submitWork(uint256 id)
-        external
-        onlyFreelancer(id)
-        inStatus(id, Status.Funded)
-    {
-        tasks[id].submissionTime = block.timestamp;
-        tasks[id].status = Status.Submitted;
-
-        emit WorkSubmitted(id);
-    }
-
-    // CLIENT APPROVE TASK
-    function approve(uint256 id)
-        external
-        nonReentrant
-        onlyClient(id)
-        inStatus(id, Status.Submitted)
-    {
-        _release(id);
-
-        tasks[id].status = Status.Approved;
-
-        emit TaskApproved(id);
-    }
-
-    // CLIENT RAISE DISPUTE
-    function dispute(uint256 id)
-        external
-        onlyClient(id)
-        inStatus(id, Status.Submitted)
-    {
-        require(
-            block.timestamp <= tasks[id].submissionTime + DISPUTE_WINDOW,
-            "Dispute window expired"
+        IERC20(token).safeTransferFrom(
+            msg.sender,
+            address(this),
+            amount
         );
 
-        tasks[id].status = Status.Disputed;
-
-        emit TaskDisputed(id);
-    }
-
-    // ADMIN RESOLVE DISPUTE
-    function resolve(uint256 id, bool freelancerWins)
-        external
-        onlyOwner
-        nonReentrant
-        inStatus(id, Status.Disputed)
-    {
-        if (freelancerWins) {
-            _release(id);
-        } else {
-            _refund(id);
+        if (s_tokenBalances[_escrowId][token] == 0) {
+            e.tokens.push(token);
         }
 
-        tasks[id].status = Status.Resolved;
+        s_tokenBalances[_escrowId][token] += amount;
 
-        emit TaskResolved(id, freelancerWins);
+        emit FundsDeposited(_escrowId, token, amount);
     }
 
-    // INTERNAL RELEASE FUNCTION
-    function _release(uint256 id) internal {
+    function releaseFunds(
+        string calldata _escrowId
+    ) external nonReentrant {
 
-        Task storage t = tasks[id];
+        Escrow storage e = s_escrows[_escrowId];
 
-        for (uint256 i = 0; i < t.proposal.length; i++) {
-            if (t.proposal[i].token == address(0)) {
-                payable(t.freelancer).transfer(t.proposal[i].amount);
-            } else {
-                IERC20(t.proposal[i].token).safeTransfer(
-                    t.freelancer,
-                    t.proposal[i].amount
+        require(e.active, "EscrowClosed");
+        require(msg.sender == e.client, "OnlyClient");
+
+        _transferTokens(_escrowId, e.freelancer);
+
+        e.active = false;
+
+        emit FundsReleased(_escrowId);
+    }
+
+    function refundFunds(
+        string calldata _escrowId
+    ) external nonReentrant {
+
+        Escrow storage e = s_escrows[_escrowId];
+
+        require(e.active, "EscrowClosed");
+        require(msg.sender == e.freelancer, "OnlyFreelancer");
+
+        _transferTokens(_escrowId, e.client);
+
+        e.active = false;
+
+        emit FundsRefunded(_escrowId);
+    }
+
+    function resolveDispute(
+        string calldata _escrowId,
+        bool releaseToFreelancer
+    ) external onlyOwner nonReentrant {
+
+        Escrow storage e = s_escrows[_escrowId];
+
+        require(e.active, "EscrowClosed");
+
+        address receiver = releaseToFreelancer
+            ? e.freelancer
+            : e.client;
+
+        _transferTokens(_escrowId, receiver);
+
+        e.active = false;
+
+        emit DisputeResolved(_escrowId, releaseToFreelancer);
+    }
+
+    function _transferTokens(
+        string memory _escrowId,
+        address receiver
+    ) internal {
+
+        Escrow storage e = s_escrows[_escrowId];
+
+        for (uint256 i = 0; i < e.tokens.length; i++) {
+
+            address token = e.tokens[i];
+
+            uint256 amount = s_tokenBalances[_escrowId][token];
+
+            if (amount > 0) {
+
+                s_tokenBalances[_escrowId][token] = 0;
+
+                IERC20(token).safeTransfer(
+                    receiver,
+                    amount
                 );
             }
         }
     }
 
-    // INTERNAL REFUND FUNCTION
-    function _refund(uint256 id) internal {
-
-        Task storage t = tasks[id];
-
-        for (uint256 i = 0; i < t.proposal.length; i++) {
-            if (t.proposal[i].token == address(0)) {
-                payable(t.client).transfer(t.proposal[i].amount);
-            } else {
-                IERC20(t.proposal[i].token).safeTransfer(
-                    t.client,
-                    t.proposal[i].amount
-                );
-            }
-        }
-    }
-
-    // VIEW BASIC TASK INFO
-    function getTaskBasic(uint256 id)
+    function getEscrow(
+        string calldata _escrowId
+    )
         external
         view
         returns (
             address client,
             address freelancer,
-            Status status
+            address[] memory tokens,
+            bool active
         )
     {
-        Task storage t = tasks[id];
-        return (t.client, t.freelancer, t.status);
+        Escrow storage e = s_escrows[_escrowId];
+
+        return (
+            e.client,
+            e.freelancer,
+            e.tokens,
+            e.active
+        );
+    }
+
+    function getTokenBalance(
+        string calldata _escrowId,
+        address token
+    ) external view returns (uint256) {
+
+        return s_tokenBalances[_escrowId][token];
+    }
+
+    function getOwner() external view returns (address) {
+        return i_owner;
     }
 }
