@@ -6,9 +6,11 @@ import {Script} from "forge-std/Script.sol";
 import {MyToken} from "../src/Token.sol";
 import {StakingRewards} from "../src/StakingRewards.sol";
 import {FreelancerContract} from "../src/FreelancerContract.sol";
+import {FreelancerSoulBoundToken} from "../src/FreelancerSoulBoundToken.sol";
+import {NDASoulBoundToken} from "../src/NDASoulBoundToken.sol";
 
 contract DeployAll is Script {
-    function run() external returns (FreelancerContract, StakingRewards, MyToken) {
+    function run() external returns (FreelancerContract, StakingRewards, MyToken, FreelancerSoulBoundToken, NDASoulBoundToken           ) {
         vm.startBroadcast();
 
         // 1. Deploy the ERC20 Token first.
@@ -24,7 +26,11 @@ contract DeployAll is Script {
         // It needs the address of the StakingRewards contract to enforce staking rules.
         FreelancerContract freelancerContract = new FreelancerContract(address(stakingContract));
 
+        // 4. Deploy the FreelancerSoulBoundToken and NDASoulBoundToken.
+        FreelancerSoulBoundToken freelancerSBT = new FreelancerSoulBoundToken();
+        NDASoulBoundToken ndaSBT = new NDASoulBoundToken();
+
         vm.stopBroadcast();
-        return (freelancerContract, stakingContract, token);
+        return (freelancerContract, stakingContract, token, freelancerSBT, ndaSBT);
     }
 }
