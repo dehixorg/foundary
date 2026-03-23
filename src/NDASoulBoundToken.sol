@@ -330,6 +330,7 @@ contract NDASoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
         uint256 activeCount = 0;
         for (uint256 i = 0; i < all.length; i++) {
             if (!isBurned[all[i]]) activeCount++;
+            
         }
         uint256[] memory active = new uint256[](activeCount);
         uint256 idx = 0;
