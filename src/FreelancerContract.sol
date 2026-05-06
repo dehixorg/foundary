@@ -33,14 +33,22 @@ contract FreelancerContract is ReentrancyGuard {
     struct Escrow {
         string escrowId;
         address[] votingOracles;
+        // FIX [M-01]: Track escrow-specific oracle membership so vote() can
+        // validate against the exact oracle set assigned to this escrow,
+        // not the global registry.
+        mapping(address => bool) isOracle;
         address freelancerAddress;
         address businessAddress;
         uint256 depositedAmount;
         IERC20 tokenAddress;
+        // FIX [H-01]: isFinalized flag makes the escrow ID immutable after
+        // creation; createEscrow() rejects any attempt to overwrite an
+        // existing escrow.
+        bool isFinalized;
     }
 
     address private immutable i_owner;
-    StakingRewards public immutable stakingContract; // <-- MADE IMMUTABLE
+    StakingRewards public immutable stakingContract;
 
     mapping(string => Freelancer) public s_freelancers;
     mapping(string => Project) public s_projects;
@@ -113,7 +121,6 @@ contract FreelancerContract is ReentrancyGuard {
             bytes(s_businesses[_businessId].businessId).length == 0,
             "BusinessExists"
         );
-
         s_businesses[_businessId].businessId = _businessId;
         s_businesses[_businessId].businessAddress = _businessAddress;
         emit BusinessAdded(_businessId, _businessAddress);
@@ -125,7 +132,6 @@ contract FreelancerContract is ReentrancyGuard {
     ) external onlyOwner {
         require(bytes(_freelancerId).length > 0, "EmptyFreelancerId");
         require(_freelancerAddress != address(0), "ZeroAddress");
-
         s_freelancers[_freelancerId].freelancerId = _freelancerId;
         s_freelancers[_freelancerId].freelancerAddress = _freelancerAddress;
         emit FreelancerAdded(_freelancerId, _freelancerAddress);
@@ -171,6 +177,18 @@ contract FreelancerContract is ReentrancyGuard {
         project.appliedFreelancers[_freelancerAddress] = true;
     }
 
+    // FIX [H-01]: Reject any attempt to overwrite an existing escrow by
+    // checking isFinalized. Once set to true the mapping slot is immutable.
+    //
+    // FIX [M-02]: Reject duplicate oracle addresses by checking the
+    // escrow-local isOracle mapping while building the oracle list.
+    // A duplicate would already map to true on the second iteration,
+    // causing the require to revert before the struct is written.
+    //
+    // FIX [M-03]: Because H-01 prevents reinitialization there is no longer
+    // a path where vote counters from a prior run outlive a new escrow
+    // configuration. The vote mappings are intrinsically bound to a single
+    // immutable lifecycle of this escrow ID.
     function createEscrow(
         string calldata _escrowId,
         address[] calldata _votingOracles,
@@ -179,43 +197,80 @@ contract FreelancerContract is ReentrancyGuard {
     ) external {
         require(bytes(_escrowId).length > 0, "EmptyEscrowId");
         require(_votingOracles.length % 2 != 0, "InvalidOracleCount");
+
+        // FIX [H-01]: Prevent reinitialization — reject if already created.
+        require(!s_escrows[_escrowId].isFinalized, "EscrowAlreadyExists");
+
+        Escrow storage newEscrow = s_escrows[_escrowId];
+
         for (uint256 i = 0; i < _votingOracles.length; i++) {
             require(s_oracles[_votingOracles[i]], "NotAValidOracle");
+
+            // FIX [M-02]: Reject duplicate oracle addresses.
+            require(!newEscrow.isOracle[_votingOracles[i]], "DuplicateOracle");
+
+            // FIX [M-01]: Populate the escrow-local isOracle mapping so that
+            // vote() can verify membership against this specific escrow's
+            // oracle set rather than the global registry.
+            newEscrow.isOracle[_votingOracles[i]] = true;
         }
-        Escrow storage newEscrow = s_escrows[_escrowId];
+
         newEscrow.escrowId = _escrowId;
         newEscrow.votingOracles = _votingOracles;
         newEscrow.freelancerAddress = _freelancer;
         newEscrow.businessAddress = msg.sender;
         newEscrow.depositedAmount = 0;
         newEscrow.tokenAddress = IERC20(_tokenAddress);
+
+        // FIX [H-01]: Lock the escrow — no future call can overwrite it.
+        newEscrow.isFinalized = true;
+
         emit EscrowCreated(_escrowId, msg.sender, _freelancer);
     }
 
-    function depositFunds(uint256 _amount, string calldata _escrowId) external {
+    // FIX [M-04]: Reorder operations to follow checks-effects-interactions.
+    // The external safeTransferFrom call is moved AFTER all state updates so
+    // that any reentrancy or non-standard token callback cannot observe an
+    // inconsistent depositedAmount. The nonReentrant modifier is added as an
+    // additional defensive layer.
+    function depositFunds(uint256 _amount, string calldata _escrowId) external nonReentrant {
         Escrow storage escrow = s_escrows[_escrowId];
         require(msg.sender == escrow.businessAddress, "OnlyBusiness");
         require(_amount > 0, "ZeroAmount");
+
+        // Effects first — update state before external interaction.
         escrow.depositedAmount += _amount;
+
+        // Interaction last — external token transfer.
         escrow.tokenAddress.safeTransferFrom(
             msg.sender,
             address(this),
             _amount
         );
+
         emit FundsDeposited(_escrowId, _amount);
     }
 
+    // FIX [M-01]: Replace the global onlyOracle modifier with an
+    // escrow-specific check using the isOracle mapping stored on the escrow
+    // struct. This ensures only oracles assigned to this particular escrow
+    // can vote on it, preventing cross-escrow vote injection.
     function vote(
         string calldata _escrowId,
         bool _release
-    ) external onlyOracle {
+    ) external {
+        // FIX [M-01]: Validate against the escrow-specific oracle set.
+        require(s_escrows[_escrowId].isOracle[msg.sender], "NotEscrowOracle");
+
         require(!s_hasVoted[_escrowId][msg.sender], "AlreadyVoted");
         s_hasVoted[_escrowId][msg.sender] = true;
+
         if (_release) {
             s_releaseVotes[_escrowId]++;
         } else {
             s_refundVotes[_escrowId]++;
         }
+
         emit Voted(_escrowId, msg.sender, _release);
     }
 
