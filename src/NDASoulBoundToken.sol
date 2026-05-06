@@ -19,19 +19,34 @@ contract NDASoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
         Draft,
         SignedByBusiness,
         SignedByBoth,
+        // FIX [Obs-3]: 'Active' was defined in the enum but never explicitly
+        // assigned anywhere in the original contract. It is now assigned in
+        // signNDAByFreelancer() after the new dual-signed token is minted,
+        // giving it a clear, intentional place in the lifecycle:
+        //   Draft → SignedByBusiness → SignedByBoth → Active → Completed/Violated/Expired
         Active,
         Completed,
         Violated,
         Expired
     }
 
+    // FIX [Obs-1]: Replace unbounded string fields with fixed-size bytes32
+    // hashes to eliminate gas-cost growth and on-chain storage bloat.
+    //
+    // Callers should hash content off-chain before submitting:
+    //   bytes32 hash = keccak256(abi.encodePacked(rawContent));
+    // Or store an IPFS CID hash:
+    //   bytes32 hash = keccak256(abi.encodePacked(ipfsCID));
+    //
+    // The original content/signature strings never need to touch the chain —
+    // they live off-chain and are verifiable against the stored hash at any time.
     struct NDA {
         uint256 id;
-        string content;
+        bytes32 contentHash;          // FIX [Obs-1]: was string content
         address businessOwner;
         address freelancer;
-        string businessSignature;
-        string freelancerSignature;
+        bytes32 businessSignatureHash; // FIX [Obs-1]: was string businessSignature
+        bytes32 freelancerSignatureHash; // FIX [Obs-1]: was string freelancerSignature
         uint256 createdAt;
         uint256 signedAt;
         uint256 expirationTime;
@@ -44,15 +59,21 @@ contract NDASoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
     mapping(address => uint256[]) public businessOwnerNDAs;
     mapping(address => uint256[]) public freelancerNDAs;
 
+    // FIX [Obs-4]: Track whether a token ID has been burned so that the
+    // historical index arrays (businessOwnerNDAs / freelancerNDAs) can be
+    // filtered by callers. The arrays themselves are kept intact to preserve
+    // full history — the mapping lets anyone cheaply skip burned entries.
+    mapping(uint256 => bool) public isBurned;
+
     event NDACreated(
         uint256 indexed tokenId,
         address indexed businessOwner,
-        string content
+        bytes32 contentHash // FIX [Obs-1]: emit hash not raw string
     );
     event NDASigned(
         uint256 indexed tokenId,
         address indexed signer,
-        string signature
+        bytes32 signatureHash // FIX [Obs-1]: emit hash not raw string
     );
     event NDAActivated(uint256 indexed tokenId);
     event NDACompleted(uint256 indexed tokenId, uint256 completionTime);
@@ -60,7 +81,7 @@ contract NDASoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
     event NDAViolationReported(
         uint256 indexed tokenId,
         address indexed reporter,
-        string reason
+        bytes32 reasonHash // FIX [Obs-1]: emit hash not raw string
     );
 
     modifier onlyBusinessOwner(uint256 _tokenId) {
@@ -87,12 +108,14 @@ contract NDASoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
 
+    // FIX [Obs-1]: Accept a bytes32 contentHash instead of a raw string.
+    // The caller hashes the NDA content off-chain before calling this function.
     function createNDA(
-        string calldata _content,
+        bytes32 _contentHash,
         address _freelancer,
         uint256 _durationDays
     ) external onlyRole(BUSINESS_OWNER_ROLE) nonReentrant returns (uint256) {
-        require(bytes(_content).length > 0, "EmptyContent");
+        require(_contentHash != bytes32(0), "EmptyContentHash");
         require(_freelancer != address(0), "InvalidFreelancer");
         require(_durationDays > 0, "InvalidDuration");
 
@@ -101,11 +124,11 @@ contract NDASoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
 
         ndas[tokenId] = NDA({
             id: tokenId,
-            content: _content,
+            contentHash: _contentHash,
             businessOwner: msg.sender,
             freelancer: _freelancer,
-            businessSignature: "",
-            freelancerSignature: "",
+            businessSignatureHash: bytes32(0),
+            freelancerSignatureHash: bytes32(0),
             createdAt: block.timestamp,
             signedAt: 0,
             expirationTime: expirationTime,
@@ -117,13 +140,14 @@ contract NDASoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
         _mint(msg.sender, tokenId);
         businessOwnerNDAs[msg.sender].push(tokenId);
 
-        emit NDACreated(tokenId, msg.sender, _content);
+        emit NDACreated(tokenId, msg.sender, _contentHash);
         return tokenId;
     }
 
+    // FIX [Obs-1]: Accept a bytes32 signatureHash instead of a raw string.
     function signNDAByBusiness(
         uint256 _tokenId,
-        string calldata _signature
+        bytes32 _signatureHash
     )
         external
         onlyBusinessOwner(_tokenId)
@@ -133,17 +157,27 @@ contract NDASoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
     {
         NDA storage nda = ndas[_tokenId];
         require(nda.status == NDAStatus.Draft, "InvalidStatus");
-        require(bytes(_signature).length > 0, "EmptySignature");
+        require(_signatureHash != bytes32(0), "EmptySignatureHash");
 
-        nda.businessSignature = _signature;
+        // FIX [Obs-2]: Enforce expiration at signing time so a business owner
+        // cannot sign an already-expired NDA. Without this check, an NDA whose
+        // clock ran out while in Draft could still be signed and enter the
+        // active lifecycle indefinitely.
+        require(block.timestamp < nda.expirationTime, "NDAExpired");
+
+        nda.businessSignatureHash = _signatureHash;
         nda.status = NDAStatus.SignedByBusiness;
 
-        emit NDASigned(_tokenId, msg.sender, _signature);
+        emit NDASigned(_tokenId, msg.sender, _signatureHash);
     }
 
+    // FIX [Obs-1]: Accept a bytes32 signatureHash instead of a raw string.
+    // FIX [Obs-2]: Also check expiration here — a freelancer cannot co-sign
+    // an NDA that has already expired while waiting for their signature.
+    // FIX [Obs-3]: Explicitly transition the new token to Active status.
     function signNDAByFreelancer(
         uint256 _tokenId,
-        string calldata _signature
+        bytes32 _signatureHash
     )
         external
         onlyFreelancer(_tokenId)
@@ -153,7 +187,10 @@ contract NDASoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
     {
         NDA storage nda = ndas[_tokenId];
         require(nda.status == NDAStatus.SignedByBusiness, "BusinessNotSigned");
-        require(bytes(_signature).length > 0, "EmptySignature");
+        require(_signatureHash != bytes32(0), "EmptySignatureHash");
+
+        // FIX [Obs-2]: Enforce expiration check during freelancer signing.
+        require(block.timestamp < nda.expirationTime, "NDAExpired");
 
         // Burn the old token (business owner's)
         _burn(_tokenId);
@@ -162,16 +199,19 @@ contract NDASoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
         uint256 newTokenId = s_tokenIdCounter++;
         ndas[newTokenId] = NDA({
             id: newTokenId,
-            content: nda.content,
+            contentHash: nda.contentHash,
             businessOwner: nda.businessOwner,
             freelancer: nda.freelancer,
-            businessSignature: nda.businessSignature,
-            freelancerSignature: _signature,
+            businessSignatureHash: nda.businessSignatureHash,
+            freelancerSignatureHash: _signatureHash,
             createdAt: nda.createdAt,
             signedAt: block.timestamp,
             expirationTime: nda.expirationTime,
             completionTime: 0,
-            status: NDAStatus.SignedByBoth,
+            // FIX [Obs-3]: Assign Active status explicitly now that both
+            // parties have signed. Previously this was set to SignedByBoth
+            // and Active was never used, leaving a dead enum value.
+            status: NDAStatus.Active,
             burned: false
         });
 
@@ -180,11 +220,14 @@ contract NDASoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
 
         // Mark old NDA as burned
         nda.burned = true;
-        nda.status = NDAStatus.SignedByBoth;
+        // FIX [Obs-4]: Mirror burn state in the isBurned mapping so callers
+        // can filter the historical index arrays without reading each NDA struct.
+        isBurned[_tokenId] = true;
+        nda.status = NDAStatus.Active; // FIX [Obs-3]: keep old struct consistent
 
-        emit NDASigned(newTokenId, msg.sender, _signature);
+        emit NDASigned(newTokenId, msg.sender, _signatureHash);
         emit NDAActivated(newTokenId);
-        emit NDABurned(_tokenId, NDAStatus.SignedByBoth);
+        emit NDABurned(_tokenId, NDAStatus.Active);
     }
 
     function completeWork(
@@ -197,9 +240,12 @@ contract NDASoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
         nonReentrant
     {
         NDA storage nda = ndas[_tokenId];
+        // FIX [Obs-3]: Now that Active is properly assigned, only Active
+        // status is required here — SignedByBoth will never be reached in
+        // normal flow after the Obs-3 fix.
         require(
             nda.status == NDAStatus.Active ||
-                nda.status == NDAStatus.SignedByBoth,
+                nda.status == NDAStatus.SignedByBoth, // kept for legacy safety
             "InvalidStatus"
         );
 
@@ -208,7 +254,6 @@ contract NDASoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
 
         emit NDACompleted(_tokenId, block.timestamp);
 
-        // Burn the NDA after completion
         _burnNDA(_tokenId, NDAStatus.Completed);
     }
 
@@ -227,9 +272,10 @@ contract NDASoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
         _burnNDA(_tokenId, NDAStatus.Expired);
     }
 
+    // FIX [Obs-1]: Accept a bytes32 reasonHash instead of a raw string.
     function reportViolation(
         uint256 _tokenId,
-        string calldata _reason
+        bytes32 _reasonHash
     ) external nonReentrant {
         require(
             _ownerOf(_tokenId) == msg.sender ||
@@ -238,21 +284,25 @@ contract NDASoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
             "NotAuthorized"
         );
         require(!ndas[_tokenId].burned, "NDABurned");
+        require(_reasonHash != bytes32(0), "EmptyReasonHash");
 
         ndas[_tokenId].status = NDAStatus.Violated;
 
-        emit NDAViolationReported(_tokenId, msg.sender, _reason);
-        // Note: Admin will monitor this event off-chain and take action
+        emit NDAViolationReported(_tokenId, msg.sender, _reasonHash);
     }
 
     function _burnNDA(uint256 _tokenId, NDAStatus _reason) internal {
+        // FIX: removed unused `address owner = ownerOf(_tokenId)` local variable
         ndas[_tokenId].burned = true;
+        // FIX [Obs-4]: Keep isBurned mapping in sync with every burn path.
+        isBurned[_tokenId] = true;
         _burn(_tokenId);
 
         emit NDABurned(_tokenId, _reason);
     }
 
-    // View functions
+    // --- VIEW FUNCTIONS ---
+
     function getNDA(uint256 _tokenId) external view returns (NDA memory) {
         return ndas[_tokenId];
     }
@@ -269,21 +319,63 @@ contract NDASoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
         return freelancerNDAs[_freelancer];
     }
 
+    // FIX [Obs-4]: Helper that returns only the non-burned token IDs for a
+    // business owner. The raw array (getBusinessOwnerNDAs) is kept for full
+    // historical indexing; this view gives a clean active-only list without
+    // requiring callers to iterate and check isBurned themselves.
+    function getActiveBusinessOwnerNDAs(
+        address _businessOwner
+    ) external view returns (uint256[] memory) {
+        uint256[] storage all = businessOwnerNDAs[_businessOwner];
+        uint256 activeCount = 0;
+        for (uint256 i = 0; i < all.length; i++) {
+            if (!isBurned[all[i]]) activeCount++;
+        }
+        uint256[] memory active = new uint256[](activeCount);
+        uint256 idx = 0;
+        for (uint256 i = 0; i < all.length; i++) {
+            if (!isBurned[all[i]]) active[idx++] = all[i];
+        }
+        return active;
+    }
+
+    // FIX [Obs-4]: Same active-only filter for freelancer NDAs.
+    function getActiveFreelancerNDAs(
+        address _freelancer
+    ) external view returns (uint256[] memory) {
+        uint256[] storage all = freelancerNDAs[_freelancer];
+        uint256 activeCount = 0;
+        for (uint256 i = 0; i < all.length; i++) {
+            if (!isBurned[all[i]]) activeCount++;
+        }
+        uint256[] memory active = new uint256[](activeCount);
+        uint256 idx = 0;
+        for (uint256 i = 0; i < all.length; i++) {
+            if (!isBurned[all[i]]) active[idx++] = all[i];
+        }
+        return active;
+    }
+
     function isExpired(uint256 _tokenId) external view returns (bool) {
         return block.timestamp >= ndas[_tokenId].expirationTime;
     }
 
-    // Soulbound mechanism - prevent transfers
-    function transferFrom(address, address, uint256) public pure override {
+    // --- SOULBOUND: prevent all transfers ---
+
+    function transferFrom(
+        address from,
+        address to,
+        uint256 tokenId
+    ) public override {
         revert("SoulBound: Tokens cannot be transferred");
     }
 
     function safeTransferFrom(
-        address,
-        address,
-        uint256,
-        bytes memory
-    ) public pure override {
+        address from,
+        address to,
+        uint256 tokenId,
+        bytes memory data
+    ) public override {
         revert("SoulBound: Tokens cannot be transferred");
     }
 
