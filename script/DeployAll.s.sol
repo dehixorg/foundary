@@ -10,8 +10,9 @@ import {FreelancerSoulBoundToken} from "../src/FreelancerSoulBoundToken.sol";
 import {NDASoulBoundToken} from "../src/NDASoulBoundToken.sol";
 import {EscrowContract} from "../src/EscrowContract.sol";
 
+
 contract DeployAll is Script {
-    function run() external returns (FreelancerContract, StakingRewards, MyToken, FreelancerSoulBoundToken, NDASoulBoundToken, EscrowContract) {
+    function run() external returns (FreelancerContract, StakingRewards, MyToken, FreelancerSoulBoundToken, NDASoulBoundToken, EscrowContract, ) {
         vm.startBroadcast();
 
         // 1. Deploy the ERC20 Token first.
@@ -37,7 +38,10 @@ contract DeployAll is Script {
         // 6. Deploy the EscrowContract.
         EscrowContract escrowContract = new EscrowContract();
 
+        
+        
+
         vm.stopBroadcast();
-        return (freelancerContract, stakingContract, token, freelancerSbt, ndaSbt, escrowContract);
+        return (freelancerContract, stakingContract, token, freelancerSbt, ndaSbt, escrowContract, );
     }
 }
