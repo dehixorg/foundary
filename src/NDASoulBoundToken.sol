@@ -362,23 +362,38 @@ contract NDASoulBoundToken is ERC721, AccessControl, ReentrancyGuard {
 
     // --- SOULBOUND: prevent all transfers ---
 
-    function transferFrom(
-        address from,
-        address to,
-        uint256 tokenId
-    ) public override {
-        revert("SoulBound: Tokens cannot be transferred");
-    }
 
-    function safeTransferFrom(
-        address from,
-        address to,
-        uint256 tokenId,
-        bytes memory data
-    ) public override {
-        revert("SoulBound: Tokens cannot be transferred");
-    }
+function transferFrom(
+    address from,
+    address to,
+    uint256 tokenId
+) public override {
+    revert("SoulBound: Tokens cannot be transferred");
+}
 
+function safeTransferFrom(
+    address from,
+    address to,
+    uint256 tokenId
+) public override {
+    revert("SoulBound: Tokens cannot be transferred");
+}
+
+function safeTransferFrom(
+    address from,
+    address to,
+    uint256 tokenId,
+    bytes memory data
+) public override {
+    revert("SoulBound: Tokens cannot be transferred");
+}
+
+function supportsInterface(
+    bytes4 interfaceId
+) public view override(ERC721, AccessControl) returns (bool) {
+    return super.supportsInterface(interfaceId);
+}
+    
     function supportsInterface(
         bytes4 interfaceId
     ) public view override(ERC721, AccessControl) returns (bool) {
