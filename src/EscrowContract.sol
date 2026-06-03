@@ -10,7 +10,10 @@ contract EscrowContract is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     address private immutable i_owner;
-    
+
+    /// @notice Maximum unique tokens allowed per escrow.
+    /// @dev Prevents DoS caused by unbounded token arrays.
+    uint256 private constant MAX_TOKENS_PER_ESCROW = 5;
 
     constructor() {
         i_owner = msg.sender;
@@ -62,7 +65,6 @@ contract EscrowContract is ReentrancyGuard {
         string calldata _escrowId,
         address _freelancer
     ) external {
-
         require(bytes(_escrowId).length > 0, "EmptyEscrowId");
         require(_freelancer != address(0), "InvalidFreelancer");
 
@@ -75,7 +77,11 @@ contract EscrowContract is ReentrancyGuard {
         e.freelancer = _freelancer;
         e.active = true;
 
-        emit EscrowCreated(_escrowId, msg.sender, _freelancer);
+        emit EscrowCreated(
+            _escrowId,
+            msg.sender,
+            _freelancer
+        );
     }
 
     function depositToken(
@@ -83,12 +89,21 @@ contract EscrowContract is ReentrancyGuard {
         address token,
         uint256 amount
     ) external nonReentrant {
-
         Escrow storage e = s_escrows[_escrowId];
 
         require(e.active, "EscrowNotActive");
         require(msg.sender == e.client, "OnlyClient");
+        require(token != address(0), "InvalidToken");
         require(amount > 0, "ZeroAmount");
+
+        if (s_tokenBalances[_escrowId][token] == 0) {
+            require(
+                e.tokens.length < MAX_TOKENS_PER_ESCROW,
+                "TooManyTokens"
+            );
+
+            e.tokens.push(token);
+        }
 
         IERC20(token).safeTransferFrom(
             msg.sender,
@@ -96,25 +111,27 @@ contract EscrowContract is ReentrancyGuard {
             amount
         );
 
-        if (s_tokenBalances[_escrowId][token] == 0) {
-            e.tokens.push(token);
-        }
-
         s_tokenBalances[_escrowId][token] += amount;
 
-        emit FundsDeposited(_escrowId, token, amount);
+        emit FundsDeposited(
+            _escrowId,
+            token,
+            amount
+        );
     }
 
     function releaseFunds(
         string calldata _escrowId
     ) external nonReentrant {
-
         Escrow storage e = s_escrows[_escrowId];
 
         require(e.active, "EscrowClosed");
         require(msg.sender == e.client, "OnlyClient");
 
-        _transferTokens(_escrowId, e.freelancer);
+        _transferTokens(
+            _escrowId,
+            e.freelancer
+        );
 
         e.active = false;
 
@@ -124,13 +141,15 @@ contract EscrowContract is ReentrancyGuard {
     function refundFunds(
         string calldata _escrowId
     ) external nonReentrant {
-
         Escrow storage e = s_escrows[_escrowId];
 
         require(e.active, "EscrowClosed");
         require(msg.sender == e.freelancer, "OnlyFreelancer");
 
-        _transferTokens(_escrowId, e.client);
+        _transferTokens(
+            _escrowId,
+            e.client
+        );
 
         e.active = false;
 
@@ -141,7 +160,6 @@ contract EscrowContract is ReentrancyGuard {
         string calldata _escrowId,
         bool releaseToFreelancer
     ) external onlyOwner nonReentrant {
-
         Escrow storage e = s_escrows[_escrowId];
 
         require(e.active, "EscrowClosed");
@@ -150,28 +168,32 @@ contract EscrowContract is ReentrancyGuard {
             ? e.freelancer
             : e.client;
 
-        _transferTokens(_escrowId, receiver);
+        _transferTokens(
+            _escrowId,
+            receiver
+        );
 
         e.active = false;
 
-        emit DisputeResolved(_escrowId, releaseToFreelancer);
+        emit DisputeResolved(
+            _escrowId,
+            releaseToFreelancer
+        );
     }
 
     function _transferTokens(
         string memory _escrowId,
         address receiver
     ) internal {
-
         Escrow storage e = s_escrows[_escrowId];
 
         for (uint256 i = 0; i < e.tokens.length; i++) {
-
             address token = e.tokens[i];
 
-            uint256 amount = s_tokenBalances[_escrowId][token];
+            uint256 amount =
+                s_tokenBalances[_escrowId][token];
 
             if (amount > 0) {
-
                 s_tokenBalances[_escrowId][token] = 0;
 
                 IERC20(token).safeTransfer(
@@ -208,7 +230,6 @@ contract EscrowContract is ReentrancyGuard {
         string calldata _escrowId,
         address token
     ) external view returns (uint256) {
-
         return s_tokenBalances[_escrowId][token];
     }
 
